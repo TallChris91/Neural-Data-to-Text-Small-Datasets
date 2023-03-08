@@ -1,0 +1,377 @@
+---
+title: "Mixed Model"
+author: "Chris van der Lee"
+date: "23-12-2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+options(max.print=1000000)
+```
+
+## Install and load
+
+Alright chums, let’s do this… LEEROOOOOOOOOOOOOOOOOOOOY JEEEEEENKIIIIIIIIIIINS!
+
+```{r install extra}
+install.packages("lme4")
+install.packages("lmerTest")
+install.packages("performance")
+install.packages('see')
+install.packages('patchwork')
+install.packages('report')
+install.packages('emmeans')
+install.packages("effects")
+install.packages("tidyverse")
+install.packages("showtext")
+install.packages("parameters")
+install.packages("xtable")
+install.packages("rlang")
+```
+
+
+```{r load}
+library(lme4)
+library(lmerTest)
+library(performance)
+library(patchwork)
+library(report)
+library(emmeans)
+library(effects)
+library(ggplot2)
+library(showtext)
+font_add_google("Open Sans", family = "Calibri")
+#font_add_google("Fira Sans", family = "Calibri")
+library(parameters)
+library(xtable)
+
+```
+
+## Load data
+
+Get the csv file from the right folder
+
+```{r Load data}
+currentpath <- getwd()
+datalink = paste(currentpath, "/Excels en Grafieken/All_Categories_2.csv", sep = "")
+ssl_data = read.csv(datalink, sep=";")
+
+colnames(ssl_data)[1] <- "Participant.Nr"
+ssl_data$TraintypeR = relevel(factor(ssl_data$Traintype), ref="No_Ext")
+ssl_data$DatasetR = relevel(factor(ssl_data$Dataset), ref="E2E")
+
+```
+
+## Fluency model
+
+Get the csv file from the right folder
+
+```{r Get models}
+fluency.model = lmer(Fluen.Mean ~ relevel(TraintypeR, ref="No_Ext") + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+fluency.model.dataset = lmer(Fluen.Mean ~ TraintypeR*DatasetR + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+fluency.model.category = lmer(Fluen.Mean ~ TraintypeR*Category + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+
+corr.model = lmer(Corr.Mean ~ TraintypeR + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+corr.model.dataset = lmer(Corr.Mean ~ TraintypeR*DatasetR + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+corr.model.category = lmer(Corr.Mean ~ TraintypeR*Category + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+
+gram.model = lmer(Gram_R ~ TraintypeR + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+gram.model.dataset = lmer(Gram_R ~ TraintypeR*DatasetR + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+gram.model.category = lmer(Gram_R ~ TraintypeR*Category + (1|DatasetR:Category:Participant.Nr), 
+                      data=ssl_data)
+
+```
+
+```{r Get Table}
+#mean(ssl_data$Fluen.Mean)
+#r2(fluency.model.dataset)
+
+#fluency_table <- model_parameters(fluency.model.dataset)
+
+#fluency_table$CI <- NULL
+##fluency_table$CI_low <- NULL
+##fluency_table$CI_high <- NULL
+#fluency_table$df_error <- NULL
+#fluency_table$Effects <- NULL
+#fluency_table$Group <- NULL
+
+#fluency_table
+
+#print(xtable(fluency_table, type = "latex"), include.rownames=FALSE)
+#summary(fluency.model.dataset)
+
+r2(gram.model.dataset)
+
+fluency_table <- model_parameters(gram.model.dataset)
+
+fluency_table$CI <- NULL
+#fluency_table$CI_low <- NULL
+#fluency_table$CI_high <- NULL
+fluency_table$df_error <- NULL
+fluency_table$Effects <- NULL
+fluency_table$Group <- NULL
+
+fluency_table
+
+print(xtable(fluency_table, type = "latex"), include.rownames=FALSE)
+
+```
+
+```{r Fluency model datasets}
+summary(fluency.model.dataset)
+emmeans(fluency.model.dataset, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(fluency.model.dataset, list(pairwise ~ DatasetR), adjust = "bonferroni")
+emmeans(fluency.model.dataset, pairwise ~ TraintypeR : DatasetR, adjust = "bonferroni")
+emmeans(fluency.model.dataset, pairwise ~ DatasetR : TraintypeR, adjust = "bonferroni")
+report(fluency.model.dataset)
+
+fluency.model.dataset.effects <- as.data.frame(Effect(c("TraintypeR","DatasetR"),mod = fluency.model.dataset))
+fluency.model.dataset.effects$TraintypeR = relevel(factor(fluency.model.dataset.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+fluen_gg <- ggplot(fluency.model.dataset.effects, aes(factor(TraintypeR, level=c('Dat_Aug', 'No_Ext', 'Pseu_Lab')),fit, group=DatasetR, color = DatasetR))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Fluency") +
+    theme(text=element_text(size = 16, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6), plot.margin = margin(10, 20, 10, 10)) +
+    scale_x_discrete(expand = c(0, 0))
+
+fluen_gg <- fluen_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+fluen_gg
+ggsave(fluen_gg, file="C:/Users/cvdrl/Desktop/FluencyGraph.eps", device="eps")
+
+
+##Other attempts at plots, an anova that is best left unspoken, and a function to copy the table so that you can paste it in Excel.
+#plot(fluency.model.dataset.effects,multiline=TRUE,confint=TRUE,ci.style="bars")
+#anova(corr.model.dataset)
+#write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+#  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+#}
+
+#write.excel(fluency.model.dataset.effects)
+#fluency.model.dataset.effects <- allEffects(fluency.model.dataset)
+#plot_model(fluency.model.dataset, type = "pred", terms = c("TraintypeR","DatasetR"), ci.lvl = 0.95)
+```
+
+```{r Correctness model datasets}
+summary(corr.model.dataset)
+emmeans(corr.model.dataset, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(corr.model.dataset, list(pairwise ~ DatasetR), adjust = "bonferroni")
+emmeans(corr.model.dataset, pairwise ~ TraintypeR : DatasetR, adjust = "bonferroni")
+emmeans(corr.model.dataset, pairwise ~ DatasetR : TraintypeR, adjust = "bonferroni")
+report(corr.model.dataset)
+
+corr.model.dataset.effects <- as.data.frame(Effect(c("TraintypeR","DatasetR"),mod = corr.model.dataset))
+corr.model.dataset.effects$TraintypeR = relevel(factor(corr.model.dataset.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+corr_gg <- ggplot(corr.model.dataset.effects, aes(factor(TraintypeR, level=c('Dat_Aug', 'No_Ext', 'Pseu_Lab')),fit, group=DatasetR, color = DatasetR))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Correctness") +
+    theme(text=element_text(size = 16, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6), plot.margin = margin(10, 20, 10, 10)) +
+    scale_x_discrete(expand = c(0, 0))
+
+corr_gg <- corr_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+corr_gg
+ggsave(corr_gg, file="C:/Users/cvdrl/Desktop/CorrectnessGraph.eps", device="eps")
+
+```
+
+```{r Grammaticality model datasets}
+summary(gram.model.dataset)
+emmeans(gram.model.dataset, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(gram.model.dataset, list(pairwise ~ DatasetR), adjust = "bonferroni")
+emmeans(gram.model.dataset, pairwise ~ TraintypeR : DatasetR, adjust = "bonferroni")
+emmeans(gram.model.dataset, pairwise ~ DatasetR : TraintypeR, adjust = "bonferroni")
+report(gram.model.dataset)
+
+gram.model.dataset.effects <- as.data.frame(Effect(c("TraintypeR","DatasetR"),mod = gram.model.dataset))
+gram.model.dataset.effects$TraintypeR = relevel(factor(gram.model.dataset.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+gram_gg <- ggplot(gram.model.dataset.effects, aes(factor(TraintypeR, level=c('Dat_Aug', 'No_Ext', 'Pseu_Lab')),fit, group=DatasetR, color = DatasetR))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Grammaticality") +
+    theme(text=element_text(size = 16, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6), plot.margin = margin(10, 20, 10, 10)) +
+    scale_x_discrete(expand = c(0, 0))
+
+gram_gg <- gram_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+gram_gg
+ggsave(gram_gg, file="C:/Users/cvdrl/Desktop/GrammaticalityGraph.eps", device="eps")
+
+```
+
+```{r Fluency model category}
+summary(fluency.model.category)
+emmeans(fluency.model.category, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(fluency.model.category, list(pairwise ~ Category), adjust = "bonferroni")
+emmeans(fluency.model.category, pairwise ~ TraintypeR : Category, adjust = "bonferroni")
+emmeans(fluency.model.category, pairwise ~ Category : TraintypeR, adjust = "bonferroni")
+report(fluency.model.category)
+
+fluency.model.category.effects <- as.data.frame(Effect(c("TraintypeR","Category"),mod = fluency.model.category))
+fluency.model.category.effects$TraintypeR = relevel(factor(fluency.model.category.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+fluen_gg <- ggplot(fluency.model.category.effects, aes(TraintypeR,fit, group=Category, color = Category))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Fluency") +
+    theme(text=element_text(size = 9, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6)) +
+    scale_x_discrete(expand = c(0, 0))
+
+fluen_gg <- fluen_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+#fluen_gg
+#ggsave(fluen_gg, file="C:/Users/cvdrl/Desktop/FluencyGraph.eps", device="eps")
+
+
+##Other attempts at plots, an anova that is best left unspoken, and a function to copy the table so that you can paste it in Excel.
+#plot(fluency.model.category.effects,multiline=TRUE,confint=TRUE,ci.style="bars")
+#anova(corr.model.category)
+#write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+#  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+#}
+
+#write.excel(fluency.model.category.effects)
+#fluency.model.category.effects <- allEffects(fluency.model.category)
+#plot_model(fluency.model.category, type = "pred", terms = c("TraintypeR","Category"), ci.lvl = 0.95)
+```
+
+```{r Correctness model category}
+summary(corr.model.category)
+emmeans(corr.model.category, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(corr.model.category, list(pairwise ~ Category), adjust = "bonferroni")
+emmeans(corr.model.category, pairwise ~ TraintypeR : Category, adjust = "bonferroni")
+emmeans(corr.model.category, pairwise ~ Category : TraintypeR, adjust = "bonferroni")
+report(corr.model.category)
+
+corr.model.category.effects <- as.data.frame(Effect(c("TraintypeR","Category"),mod = corr.model.category))
+corr.model.category.effects$TraintypeR = relevel(factor(corr.model.category.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+corr_gg <- ggplot(corr.model.category.effects, aes(TraintypeR,fit, group=Category, color = Category))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Correctness") +
+    theme(text=element_text(size = 9, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6)) +
+    scale_x_discrete(expand = c(0, 0))
+
+corr_gg <- corr_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+#corr_gg
+#ggsave(corr_gg, file="C:/Users/cvdrl/Desktop/CorrectnessGraph.eps", device="eps")
+
+```
+
+```{r Grammaticality model category}
+summary(gram.model.category)
+emmeans(gram.model.category, list(pairwise ~ TraintypeR), adjust = "bonferroni")
+emmeans(gram.model.category, list(pairwise ~ Category), adjust = "bonferroni")
+emmeans(gram.model.category, pairwise ~ TraintypeR : Category, adjust = "bonferroni")
+emmeans(gram.model.category, pairwise ~ Category : TraintypeR, adjust = "bonferroni")
+report(gram.model.category)
+
+gram.model.category.effects <- as.data.frame(Effect(c("TraintypeR","Category"),mod = gram.model.category))
+gram.model.category.effects$TraintypeR = relevel(factor(gram.model.category.effects$TraintypeR), ref="No_Ext")
+
+pd <- position_dodge(0.05) # move them .05 to the left and right
+showtext_auto()
+
+gram_gg <- ggplot(gram.model.category.effects, aes(TraintypeR,fit, group=Category, color = Category))+
+    geom_errorbar(aes(ymin=lower, ymax=upper), 
+                width=0.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd) +
+    xlab("Learning Type") +
+    ylab("Grammaticality") +
+    theme(text=element_text(size = 9, family="Calibri"), panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), panel.background = element_blank(), 
+          axis.line = element_line(colour = "grey"), axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold")) +
+    theme(legend.justification=c(1,0),
+          legend.position=c(1,0),
+          legend.key=element_blank(), legend.title=element_blank(), legend.background=element_blank(), axis.text.x = element_text(hjust=0.6)) +
+    scale_x_discrete(expand = c(0, 0))
+
+gram_gg <- gram_gg + scale_color_manual(values=c("#4472C4", "#00B0F0", "#E9E42B", "#ED7D31"))
+
+#gram_gg
+#ggsave(gram_gg, file="C:/Users/cvdrl/Desktop/GrammaticalityGraph.eps", device="eps")
+
+```
+
+```{r Report and check models}
+#coef(fluency.model)
+#hist(ssl_data$Corr.Mean)
+#hist(ssl_data$Fluen.Mean)
+#hist(ssl_data$Gram)
+check_model(fluency.model)
+check_model(corr.model)
+check_model(gram.model)
+#report(fluency.model)
+```
